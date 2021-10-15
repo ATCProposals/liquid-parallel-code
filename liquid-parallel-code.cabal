@@ -16,11 +16,15 @@ extra-source-files:  CHANGELOG.md, README.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     MergeSort
+  exposed-modules:     
+    MergeSort,
+    SplitArray,
+    LinearArray
   -- other-modules:
   -- other-extensions:
   build-depends:       
       base >=4.15,
-      linear-base
+      linear-base,
+      array
   -- hs-source-dirs:
   default-language:    Haskell2010
