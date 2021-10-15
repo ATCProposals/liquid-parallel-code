@@ -1,0 +1,5 @@
+.liquid/
+.stack-work/
+*.save0
+*.lock
+dist*

@@ -1,0 +1,2 @@
+dockerimage: Dockerfile
+	docker build .
