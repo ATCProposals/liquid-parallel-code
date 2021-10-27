@@ -1,6 +1,7 @@
 module Main where
 
 import Lib
+import Array
 
 main :: IO ()
-main = someFunc
+main = print "Hey"
