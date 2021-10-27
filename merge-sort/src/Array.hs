@@ -23,7 +23,13 @@ instance Sliceable List where
           ls1 = Slice (j, j + i) (List xs1)
           ls2 = Slice (j + i + 1, k) (List xs2)
 
-  merge (Slice (j, _) (List xs1)) (Slice (_, k) (List xs2)) =
-    Slice (j, k) $ List $ xs1 ++ xs2
+  mergeInto tmp (Slice (j, _) (List xs)) lx (Slice (_, k) (List ys)) ly = 
+    Slice (j, k) $ List $ aux xs ys
+    where aux [] ys = ys
+          aux xs [] = xs
+          aux (x : xs) (y : ys) =
+            if x < y 
+            then x : aux xs (y : ys)
+            else y : aux (x : xs) ys       
 
   

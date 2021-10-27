@@ -29,8 +29,24 @@ class ArrayLike c where
   alloc :: Int -> c a
   (!) :: c a -> Int -> a
   (<~) :: c a -> (Int, a) -> c a
+  copy :: 
+    (Int, Int) -> -- input buffer bounds
+    c a ->        -- input buffer
+    (Int, Int) -> -- output buffer bounds -- equal range to input bounds
+    c a ->        -- output buffer
+    c a
   
 class ArrayLike c => Sliceable c where
+  splitAt :: Int -> Slice p c a -> (Slice ('L p) c a, Slice ('R p) c a)
+
+  mergeInto :: Ord a =>
+    Slice p c a ->      -- return buffer, length = length_l + length_r 
+    Slice ('L p) c a -> 
+    Int ->              -- length_l
+    Slice ('R p) c a -> 
+    Int ->              -- length_r
+    Slice p c a
+  
   toSlice :: c a -> Slice W c a
   toSlice arr = 
     let (Ur len, arr) = length2 arr in
@@ -39,8 +55,6 @@ class ArrayLike c => Sliceable c where
   fromSlice :: Slice W c a -> c a
   fromSlice (Slice _ arr) = arr
 
-  splitAt :: Int -> Slice p c a -> (Slice ('L p) c a, Slice ('R p) c a)
-  merge :: Slice ('L p) c a -> Slice ('R p) c a -> Slice p c a
 
 instance Sliceable c => ArrayLike (Slice p c) where
   length (Slice _ xs) = ArrayLike.length xs
