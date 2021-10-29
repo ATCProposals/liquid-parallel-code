@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 module Cilksort where
+{-
 import ArrayLike
 
 splitDepth :: Int
@@ -34,6 +35,12 @@ split (Slice bs xs) (Slice bs' tmp) =
   let (xs1, xs2) = ArrayLike.splitAt pivot (Slice bs xs) in
   let (tmp1, tmp2) = ArrayLike.splitAt pivot (Slice bs' tmp) in
   (xs1, xs2, tmp1, tmp2, Ur pivot, Ur (len - pivot))
+
+{-@
+predicate SortOf Xs Ys = Xs `IsPermutation` Ys && Sorted Ys
+predicate IsPermutation Xs Ys = EqLength Xs Ys && IsPermutation' 0 Xs Ys
+predicate IsPermutation' N Xs Ys = 
+@-}
 
 -- 2-way merge sort inplace
 -- TODO: Generalize to n-way
@@ -75,3 +82,5 @@ mergeSort xs =
 
 cilksort :: (Ord a, Sliceable c) => c a -> c a
 cilksort = fromSlice . mergeSort . toSlice
+
+{-@ cilksort :: (Ord a, Sliceable c) => xs:(c a) -> (c a)<SortOf xs> @-}-}

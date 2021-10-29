@@ -16,7 +16,6 @@ instance ArrayLike List where
     where write (x : xs') i e = if i == 0 then e : xs' else write xs' (i - 1) e
           write [] _ _ = undefined
 
-instance Sliceable List where  
   splitAt i (Slice (j, k) (List xs)) = (ls1, ls2)
     where xs1 = take i xs
           xs2 = drop i xs
