@@ -1,4 +1,5 @@
 module Set where
+import Prelude hiding (and, or)
 
 type Set a = a -> Bool
 
@@ -6,26 +7,34 @@ type Set a = a -> Bool
 empty :: Set a
 empty _ = False
 
-{-@ reflect singleton @-}
-singleton :: Eq a => a -> Set a
-singleton x y = x == y
+{-@ reflect single @-}
+single :: Eq a => a -> Set a
+single x y = x == y
 
-{-@ reflect u @-}
-(&) :: Eq a => Set a -> Set a -> Set a
-u p q x = p x || q x
+{-@ reflect and @-}
+and :: Eq a => Set a -> Set a -> Set a
+and p q x = p x && q x
 
-{-@ reflect n @-}
-(|) :: Eq a => Set a -> Set a -> Set a
-n p q x = p x && q x
+{-@ reflect or  @-}
+or :: Eq a => Set a -> Set a -> Set a
+or p q x = p x || q x
 
-{-@ reflect compl @-}
-compl :: Eq a => Set a -> Set a
-compl q x = not (q x)
+{-@ reflect neg @-}
+neg :: Eq a => Set a -> Set a
+neg q x = not (q x)
 
-{-@ relect (\\) @-}
-(\\) :: Eq a => Set a -> Set a -> Set a
-xs \\ ys = xs & compl ys
+{-@ relect diff @-}
+diff :: Eq a => Set a -> Set a -> Set a
+diff p q = p `and` neg q
 
-{-# INLINE #-}
-(:->) : a -> b -> Set (a, b)
-i :-> v = singleton (i, v)
+{-@ reflect (-+) @-}
+(-+) :: (Eq i, Eq a) => Set (i, a) -> (i, a) -> Set (i, a)
+p -+ (i, x) = (p `diff` \(j, _) -> i == j) `and` single (i, x)
+
+{-@ assume (//) :: (Eq i, Eq a) => 
+      ixs:(Set (i, a)) -> 
+      xs:(Set i) ->
+      Set (i <xs>, a) @-}
+(//) :: (Eq i, Eq a) => Set (i, a) -> Set i -> Set (i, a)
+p // q = p `diff` \(i, _) -> not (q i)
+

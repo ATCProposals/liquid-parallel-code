@@ -138,7 +138,7 @@ mergeSortInto ::
 mergeSortInplace lt src (i, j) tmp =
   let pivot = (j - i + 1) `div` 2 in
   let (src', tmp') = spawn $ mergeSortInto lt src (i, pivot) tmp in
-  let (src'1, tmp'1) = mergeSortInto lt src' (pivot + 1, j) tmp' in
+  let (src'1, tmp'1) = mergeSortInto lt src (pivot + 1, j) tmp in
   let () = sync in
   mergeInto lt src i tmp (i, pivot) (pivot + 1, j)
 
