@@ -22,12 +22,15 @@ copyInto ::
   Int -> -- start index
   Array a id' -> -- src array
   Int -> -- src start index
-  Int -> -- number of elements
   (Array a id, Array a id')
-copyInto ret _ src _ 0 = (ret, src)
-copyInto ret i src j k = 
-  let (Ur x, src') = get2 src j in
-  copyInto (set ret i x) (i + 1) src' (j + 1) (k - 1)
+copyInto ret i src j = 
+  let (Ur lenSrc, src') = length2 src in
+  if j < lenSrc
+  then
+    let (Ur v, src'1) = get2 src' j in
+    copyInto (set ret i v) (i + 1) src'1 (j + 1)
+  else (ret, src)
+
 {-
 swapIndex :: Array a id -> Int -> Int -> Array a id
 swapIndex xs i j = 
@@ -110,69 +113,80 @@ quickSortInplace k lt src (i, j) =
     src'3
 -}
 
+mergeInto' ::
+  Array Int id ->
+  Int ->
+  Array Int id' ->
+  Int ->
+  Array Int id' ->
+  Int ->
+  (Array Int id, Array Int id')
+mergeInto' ret i src1 j1 src2 j2 =
+  let (Ur len1, src1') = length2 src1 in
+  let (Ur len2, src2') = length2 src2 in
+  if j1 >= len1
+  then 
+    let (ret', src2'1) = copyInto ret i src2 j2 in
+    (ret', src1' +:+ src2'1)
+  else if j2 >= len2
+  then 
+    let (ret', src1'1) = copyInto ret i src1 j1 in
+    (ret', src1'1 +:+ src2')
+  else
+    let (Ur v1, src1'1) = get2 src1' j1 in
+    let (Ur v2, src2'1) = get2 src2' j2 in
+    if v1 < v2
+    then mergeInto' (set ret i v1) (i + 1) src1'1 (j1 + 1) src2'1 j2
+    else mergeInto' (set ret i v2) (i + 1) src1'1 j1 src2'1 (j2 + 1)
+    
 mergeInto :: 
   Array Int id -> -- return buffer
-  Int -> -- start index in return buffer
-  Array Int id' -> -- src buffer
-  (Int, Int) -> -- left subarray
-  (Int, Int) -> -- right subarray
+  Array Int id' -> -- src buffer 1
+  Array Int id' -> -- src buffer 2
   (Array Int id, Array Int id')
-mergeInto ret i src (i1, j1) (i2, j2)
-  | i1 > j1 = copyInto ret i src i2 (j2 - i2 + 1)
-  | i2 > j2 = copyInto ret i src i1 (j1 - i1 + 1)
-  | otherwise = 
-      let (Ur v1, src') = get2 src i1 in
-      let (Ur v2, src'1) = get2 src' i2 in
-      if v1 < v2 
-      then mergeInto (set ret i v1) (i + 1) src'1 (i1 + 1, j1) (i2, j2)
-      else mergeInto (set ret i v2) (i + 1) src'1 (i1, j1) (i2 + 1, j2)
+mergeInto ret src1 src2 = mergeInto' ret 0 src1 0 src2 0
 
-mergeSortInplace ::  
+mergeSortInplace ::
   Array Int id -> -- array to be sorted
-  (Int, Int) -> -- bounds
   Array Int id' -> -- temporary buffer
   (Array Int id, Array Int id') -- src and temporary buffers
 
 -- Destructively sort into return buffer
 mergeSortInto :: 
   Array Int id' -> -- return buffer
-  (Int, Int) -> -- bounds
   Array Int id -> -- src array
   (Array Int id', Array Int id) -- return and src buffers
 
-mergeSortInplace src (i, j) tmp =
-  if j <= i
-  then (src, tmp)
+mergeSortInplace src tmp =
+  let (Ur len, src') = length2 src in
+  if len <= 1
+  then (src', tmp)
   else
-    let pivot = (j - i) `div` 2 in
-    let (src1, src2) = split src pivot in
-    let (tmp1, tmp2) = split tmp pivot in
-    let (tmp1', src1') = spawn $ mergeSortInto tmp1 (i, pivot) src1 in
-    let (tmp2', src2') = mergeSortInto tmp2 (pivot + 1, j) src2 in
-    let () = sync in
-    let src' = src1' +:+ src2' in
-    let tmp' = tmp1' +:+ tmp2' in
-    mergeInto src' i tmp' (i, pivot) (pivot + 1, j)
+    let mid = (len - 1) `div` 2 in
+    let (src1, src2) = split src (mid + 1) in
+    let (tmp1, tmp2) = split tmp (mid + 1) in
+    let (tmp1', src1') = mergeSortInto tmp1 src1 in
+    let (tmp2', src2') = mergeSortInto tmp2 src2 in
+    let src'1 = src1' +:+ src2' in
+    mergeInto src'1 tmp1' tmp2'
 
-mergeSortInto ret (i, j) src =
-  if j <= i
-  then copyInto ret i src i (j - i + 1) 
+mergeSortInto ret src =
+  let (Ur len, src') = length2 src in
+  if len <= 1 
+  then copyInto ret 0 src' 0
   else
-    let pivot = (j - i) `div` 2 in
-    let (src1, src2) = split src pivot in
-    let (ret1, ret2) = split ret pivot in
-    let (src1', ret1') = spawn $ mergeSortInplace src1 (i, pivot) ret1 in
-    let (src2', ret2') = mergeSortInplace src2 (pivot + 1, j) ret2 in
-    let () = sync in
-    let src' = src1' +:+ src2' in
+    let mid = (len - 1) `div` 2 in
+    let (src1, src2) = split src' (mid + 1) in
+    let (ret1, ret2) = split ret (mid + 1) in
+    let (src1', ret1') = mergeSortInplace src1 ret1 in
+    let (src2', ret2') = mergeSortInplace src2 ret2 in
     let ret' = ret1' +:+ ret2' in
-    mergeInto ret' i src' (i, pivot) (pivot + 1, j)
+    mergeInto ret' src1' src2'
 
-mergeSort :: Array Int id -> (Int, Int) -> Array Int id
-mergeSort xs (i, j) = 
-  fst $ mergeSortInplace xs (i, j) $ alloc (j - i + 1)
+mergeSort :: Array Int id -> Array Int id
+mergeSort xs = 
+  let (Ur len, xs') = length2 xs in
+  fst $ mergeSortInplace xs' $ alloc len 0
 
 cilkSort :: Array Int id -> Array Int id
-cilkSort xs = 
-  let (Ur len, xs') = length2 xs in
-  mergeSort xs' (0, len - 1) 
+cilkSort xs = mergeSort xs

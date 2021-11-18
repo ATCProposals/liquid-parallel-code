@@ -34,7 +34,7 @@ library
   hs-source-dirs:
       src
   build-depends:
-      array,
+      vector,
       linear-base,
       liquid-base,
       liquidhaskell,

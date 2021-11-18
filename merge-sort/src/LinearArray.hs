@@ -1,109 +1,71 @@
-{-# LANGUAGE LinearTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-
+{-# LANGUAGE NoImplicitPrelude #-}
 module LinearArray where
 import Prelude hiding (length)
-
-import qualified Data.Array.IO as A
-import Data.Array.MArray as M
+import Data.List hiding (length)
+import qualified Data.Vector as V
 import Data.Unrestricted.Internal.Ur
--- import Data.Unrestricted.Linear
-import System.IO.Unsafe
--- import Unsafe.Linear
 
-import qualified Set as S
+type RawArray a = V.Vector a
 
-{-@ type Nat = Int <(\n -> 0 <= n)> @-}
+data Array a id = Array {
+  unwrap :: RawArray a,
+  bounds :: (Int, Int)
+} deriving Eq
 
-type RawArray a = A.IOArray Int a
+{-@ type Nat = {i:Int | 0 <= i} @-}
+{-@ type BoundNat N = {i:Nat | i <= N} @-}
+{-@ type Exact X = {x:_ | x == X} @-}
 
-{-@ newtype Array a id <dom :: Set Int, rng :: Set (Int <dom>, a)> = 
-      Array (RawArray a) @-}
-newtype Array a id = Array (RawArray a)
+{-@ type Length Xs = Exact (length xs) @-}
+{-@ length :: Array a id -> Length xs @-}
+length :: Array a id -> Int
+length (Array _ (i, j)) = j - i + 1
 
-{-# NOINLINE alloc #-}
-{-@ assume alloc ::
-      n:Nat ->
-      Array <(\i -> 0 <= i && i < n), empty> a id @-}
-alloc :: Int -> Array a id
-alloc n = Array $ unsafePerformDupableIO $ newArray_ (0, n - 1)
+{-@ type SizedArray N a id = {xs:(Array a id) | length xs == N} @-}
+{-@ type IndexOf Xs = BoundNat (length Xs) @-}
 
-{-# NOINLINE get #-}
-{-@ assume get ::
-      Array <dom, rng> a id ->
-      i:(Int <dom>) ->
-      Ur (a <{\v -> rng (i, v)}>) @-}
+{-@ alloc :: n:Int -> a -> SizedArray n a id @-}
+alloc :: Int -> a -> Array a id
+alloc n v = Array (V.replicate n v) (0, n - 1)
+
+{-@ type Get Xs I = Exact (get Xs I) @-}
+{-@ get :: xs:(Array a id) -> k:(IndexOf xs) -> Get xs k @-}
 get :: Array a id -> Int -> Ur a
-get =  go
-  where go :: Array a id -> Int -> Ur a
-        go (Array arr) i = Ur $ unsafePerformDupableIO $ do
-          v <- M.readArray arr i
-          return v
-
-{-# NOINLINE length #-}
-{-@ assume length :: Array <dom, rng> a id -> Ur Nat @-}
-length :: Array a id -> Ur Int
-length =  go
-  where go :: Array a id -> Ur Int
-        go (Array arr) = Ur $ unsafePerformDupableIO $ do 
-          (i, j) <- getBounds arr
-          return (j - i + 1)
-
-{-@ newtype UnsafeAlias a id <dom :: Set Int, rng :: Set (Int, a)> =
-      UnsafeAlias (Array <dom, rng> a id) @-}
-newtype UnsafeAlias a id = UnsafeAlias (Array a id)
- 
-{-@ assume unsafeAlias :: 
-      Array <dom, rng> a id -> 
-      (Array <dom, rng> a id, Array <dom, rng> a id) @-}
-unsafeAlias :: Array a id -> (Array a id, Array a id)
-unsafeAlias =  unsafeAlias'
-  where unsafeAlias' :: Array a id -> (Array a id, Array a id)
-        unsafeAlias' arr = (arr, arr)
+get (Array xs (j, k)) i
+  | 0 <= i && i <= k - j = Ur $ xs V.! i
+  | otherwise = error "Get out of bounds"
 
 {-@ get2 :: 
-      Array <dom, rng> a id -> 
-      i:(Int <dom>) -> 
-      (Ur (a <{\v -> rng (i, v)}>), Array <dom, rng> a id) @-}
+      xs:(Array a id) -> 
+      k:(IndexOf xs) -> 
+      (Ur (Get xs k), Exact xs) @-}
 get2 :: Array a id -> Int -> (Ur a, Array a id)
-get2 arr i =  go $ unsafeAlias arr
-  where go :: (Array a id, Array a id) -> (Ur a, Array a id)
-        go (arr1, Array arr2) = (get arr1 i, Array arr2)
+get2 xs i = (get xs i, xs)
 
-{-# NOINLINE set #-}
-{-@ assume set ::
-      Array <dom, rng> a id ->
-      i:(Int <dom>) ->
-      v:a ->
-      Array <dom, rng -+ (i, v)> @-}
+{-@ set ::
+      xs:(SizedArray n a id) ->
+      IndexOf xs ->
+      a ->
+      SizedArray n a id @-}   
 set :: Array a id -> Int -> a -> Array a id
-set arr i v =  go v $ unsafeAlias arr
-  where go :: a -> (Array a id, Array a id) -> Array a id
-        go v (Array arr1, Array arr2) = Array $ unsafePerformDupableIO $ do 
-          () <- M.writeArray arr1 i v
-          return arr2
+set (Array xs (j, k)) i x
+  | 0 <= i && i <= k - j = Array (xs V.// [(i, x)]) (j, k)
+  | otherwise = error "Set out of bounds"
 
-{-@ type Length Xs = Int <\n -> n == length Xs> @-}
-{-@ length2 :: 
-      xs:(Array <dom, rng> a id) -> 
-      (Ur (Length xs), Array <dom, rng> a id) @-}
+{-@ length2 :: xs:(Array a id) -> (Ur (Length xs), Exact xs) @-}
 length2 :: Array a id -> (Ur Int, Array a id)
-length2 arr =  go $ unsafeAlias arr
-  where go :: (Array a id, Array a id) -> (Ur Int, Array a id)
-        go (arr1, arr2) = (length arr1, arr2)
+length2 xs = (Ur (length xs), xs)
 
-{-@ assume split ::
-      Array <dom, rng> id a ->
-      i:(Int <dom>) ->
-      (Array <dom `and` (>=) i, rng // (dom `and` (>=) i)> a 10,
-       Array <dom `and` (<) i, rng // (dom `and` (<) i)> id a) @-}
-split :: Array id a -> Int -> (Array id a, Array id a)
-split arr _ = (arr1, arr2)
-  where (arr1, arr2) = unsafeAlias arr
+{-@ split :: 
+      xs:(Array a id) ->
+      IndexOf xs ->
+      (Array a id, Array a id) @-}
+split :: Array a id -> Int -> (Array a id, Array a id)
+split (Array xs (j, k)) i = (Array xs1 (j, j + i - 1), Array xs2 (j + i, k))
+  where (xs1, xs2) = V.splitAt i xs
 
-{-@ assume (+:+) ::a
-      Array <dom, rng> a id ->
-      Array <dom', rng'> a id ->
-      Array <dom `or` dom', rng `or` rng'> a id @-}
+{-@ (+:+) :: SizedArray n a id -> SizedArray m a id -> SizedArray (m + n) a id @-}
 (+:+) :: Array a id -> Array a id -> Array a id
-xs +:+ ys = xs `seq` ys
+Array xs (i, j) +:+ Array ys (j', k)
+  | j + 1 == j' = Array (xs V.++ ys) (i, k)
+  | otherwise = error "Bad bounds!"

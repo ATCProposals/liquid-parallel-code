@@ -7,58 +7,46 @@ import LinearArray
 import Cilksort
 import Data.Unrestricted.Internal.Ur
 
+intAlloc n = alloc n 0
+
 main :: IO ()
-main  = test2
+main  = test1
 
--- Error
-test2 = let xs :: Array Int () = alloc 3 in
-        let xs' = set xs 0 2 in
-        let xs'1 = set xs' 1 3 in
-        let xs'2 = set xs'1 2 (-200) in
-        let (xs'3, tmp) = mergeSortInplace xs'2 (0, 2) $ alloc 3 in
-        let (Ur x, src'1) = get2 xs'3 0 in
-        let (Ur y, src'2) = get2 src'1 1 in
-        let (Ur z, src'3) = get2 src'2 2 in
-        do print (x, y, z) 
+-- Passes after fixing split
+test4 = let xs = intAlloc 2 in
+        let xs' = set xs 0 4 in
+        let xs'1 = set xs' 1 (-100) in
+        let xs'2 = cilkSort xs'1 in
+        let (Ur n1, xs'3) = get2 xs'2 0 in
+        let (Ur n2, xs'4) = get2 xs'3 1 in
+        print (n1, n2)
 
--- Inlined test2. Fails with error.
-test1 :: IO ()
-test1 = let xs :: Array Int () = alloc 3 in
-        let xs' = set xs 0 2 in
-        let xs'1 = set xs' 1 3 in
-        let xs'2 = set xs'1 2 (-200) in
-        let (xs1, xs2) = split xs'2 1 in
-        let (tmp1, tmp2) = split (alloc 3) 1 in
-        let (tmp1', xs1') = mergeSortInto tmp1 (0, 1) xs1 in
-        let (tmp2', xs2') = mergeSortInto tmp2 (2, 2) xs2 in
-        let src = xs1' +:+ xs2' in
-        let tmp = tmp1' +:+ tmp2' in
-        let (Ur a, tmp'') = get2 tmp 0 in
-        let (Ur b, tmp''1) = get2 tmp'' 1 in
-        let (Ur c, tmp''2) = get2 tmp2' 2 in
-        let (src', tmp') = mergeInto src 0 tmp''2 (0, 1) (2, 2) in
-        let (Ur x, src'1) = get2 src' 0 in
-        let (Ur y, src'2) = get2 src'1 1 in
-        let (Ur z, src'3) = get2 src'2 2 in
-        do print (x, y, z) 
+-- Passes as expected
+test3 = let xs = intAlloc 1 in
+        let xs' = set xs 0 5 in
+        let xs'1 = cilkSort xs' in
+        let (Ur n, xs'2) = get2 xs'1 0 in
+        print n
 
--- Same as test1, with nothing but an extra print. Succeeds behaviorally.
-test3 :: IO ()
-test3 = let xs :: Array Int () = alloc 3 in
-        let xs' = set xs 0 2 in
-        let xs'1 = set xs' 1 3 in
-        let xs'2 = set xs'1 2 (-200) in
-        let (xs1, xs2) = split xs'2 1 in
-        let (tmp1, tmp2) = split (alloc 3) 1 in
-        let (tmp1', xs1') = mergeSortInto tmp1 (0, 1) xs1 in
-        let (tmp2', xs2') = mergeSortInto tmp2 (2, 2) xs2 in
-        let src = xs1' +:+ xs2' in
-        let tmp = tmp1' +:+ tmp2' in
-        let (Ur a, tmp'') = get2 tmp 0 in
-        let (Ur b, tmp''1) = get2 tmp'' 1 in
-        let (Ur c, tmp''2) = get2 tmp2' 2 in
-        let (src', tmp') = mergeInto src 0 tmp''2 (0, 1) (2, 2) in
-        let (Ur x, src'1) = get2 src' 0 in
-        let (Ur y, src'2) = get2 src'1 1 in
-        let (Ur z, src'3) = get2 src'2 2 in
-        do print (a, b, c); print (x, y, z) 
+
+-- Set out of bounds like expected
+test2 = let xs = intAlloc 0 in
+        let xs' = set xs 0 1 in
+        let (Ur n, xs'1) = get2 xs' 0 in
+        print n
+
+-- Vector out of bounds
+test1 = let xs = intAlloc 5 in
+        let xs' = set xs 0 3000 in
+        let xs'1 = set xs' 1 100 in
+        let xs'2 = set xs'1 2 2 in
+        let xs'3 = set xs'2 3 (-100) in
+        let xs'4 = set xs'3 4 (-2000) in
+        let xs'5 = cilkSort xs'4 in
+        let (Ur v0, xs'6) = get2 xs'5 0 in
+        let (Ur v1, xs'7) = get2 xs'6 1 in
+        let (Ur v2, xs'8) = get2 xs'7 2 in
+        let (Ur v3, xs'9) = get2 xs'8 3 in
+        let (Ur v4, xs'10) = get2 xs'9 4 in
+        print (v0, v1, v2, v3, v4)
+
