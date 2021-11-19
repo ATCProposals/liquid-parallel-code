@@ -1,71 +1,94 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+
+{-@ LIQUID "--reflection" @-}
+{-@ LIQUID "--no-adt"         @-}
+{-@ LIQUID "--short-names" @-}
+
 module LinearArray where
 import Prelude hiding (length)
 import Data.List hiding (length)
 import qualified Data.Vector as V
 import Data.Unrestricted.Internal.Ur
 
+{-@ type Nat = {i:Int | 0 <= i} @-}
+
+{-@ die :: {v:String | False} -> a @-}
+die :: String -> a
+die msg = error msg
+
+{-@ inline inRange @-}
+{-@ inRange :: Int -> Int -> Int -> Bool @-}
+inRange :: Int -> Int -> Int -> Bool
+inRange i j k = i <= k && k <= j
+
 type RawArray a = V.Vector a
 
-data Array a id = Array {
+{-@ data Slice a id = Slice {
+      unwrap :: RawArray a,
+      leftBound :: Nat,
+      rightBound :: {i:Int | i - leftBound + 1 >= 0}
+    } @-}
+data Slice a id = Slice {
   unwrap :: RawArray a,
-  bounds :: (Int, Int)
+  leftBound :: Int,
+  rightBound :: Int
 } deriving Eq
 
-{-@ type Nat = {i:Int | 0 <= i} @-}
-{-@ type BoundNat N = {i:Nat | i <= N} @-}
-{-@ type Exact X = {x:_ | x == X} @-}
+{-@ type InRange I J = {i:Int | inRange I J i} @-}
+{-@ type Exact a X = {x:a | x = X} @-}
 
-{-@ type Length Xs = Exact (length xs) @-}
-{-@ length :: Array a id -> Length xs @-}
-length :: Array a id -> Int
-length (Array _ (i, j)) = j - i + 1
+{-@ inline length @-}
+{-@ length :: Slice a id -> Nat @-}
+length :: Slice a id -> Int
+length (Slice _ i j) = j - i + 1
 
-{-@ type SizedArray N a id = {xs:(Array a id) | length xs == N} @-}
-{-@ type IndexOf Xs = BoundNat (length Xs) @-}
+{-@ type Length Xs = Exact Nat (length xs) @-}
+{-@ type SizedSlice a id N = {xs:(Slice a id) | length xs == N} @-}
+{-@ type IndexOf Xs = {i:Int | 0 <= i && i < length Xs} @-}
 
-{-@ alloc :: n:Int -> a -> SizedArray n a id @-}
-alloc :: Int -> a -> Array a id
-alloc n v = Array (V.replicate n v) (0, n - 1)
+{-@ alloc :: n:{m:Int | 0 < n} -> a -> SizedSlice a id n @-}
+alloc :: Int -> a -> Slice a id
+alloc n v = Slice (V.replicate n v) 0 (n - 1)
 
-{-@ type Get Xs I = Exact (get Xs I) @-}
-{-@ get :: xs:(Array a id) -> k:(IndexOf xs) -> Get xs k @-}
-get :: Array a id -> Int -> Ur a
-get (Array xs (j, k)) i
-  | 0 <= i && i <= k - j = Ur $ xs V.! i
-  | otherwise = error "Get out of bounds"
+{-@ type Get a Xs I = Exact a (get Xs I) @-}
+{-@ measure get :: Eq a => xs:(Slice a id) -> k:(IndexOf xs) -> Get a xs k @-}
+get :: Eq a => Slice a id -> Int -> a
+get arr i = unwrap arr V.! i
 
-{-@ get2 :: 
-      xs:(Array a id) -> 
+{-@ get2 :: Eq a =>
+      xs:(Slice a id) -> 
       k:(IndexOf xs) -> 
-      (Ur (Get xs k), Exact xs) @-}
-get2 :: Array a id -> Int -> (Ur a, Array a id)
-get2 xs i = (get xs i, xs)
+      Get a xs k @-}
+get2 :: Eq a => Slice a id -> Int -> a
+get2 xs i = get xs i
 
 {-@ set ::
-      xs:(SizedArray n a id) ->
+      xs:(Slice a id) ->
       IndexOf xs ->
       a ->
-      SizedArray n a id @-}   
-set :: Array a id -> Int -> a -> Array a id
-set (Array xs (j, k)) i x
-  | 0 <= i && i <= k - j = Array (xs V.// [(i, x)]) (j, k)
-  | otherwise = error "Set out of bounds"
+      {ys:(Slice a id) | length xs == length ys} @-}   
+set :: Slice a id -> Int -> a -> Slice a id
+set arr@(Slice xs j k) i x
+  | inRange 0 (length arr - 1) i = Slice (xs V.// [(i, x)]) j k
+  | otherwise = die "Set out of bounds"
 
-{-@ length2 :: xs:(Array a id) -> (Ur (Length xs), Exact xs) @-}
-length2 :: Array a id -> (Ur Int, Array a id)
+{-@ length2 :: xs:(Slice a id) -> (Ur (Length xs), Exact (Slice a id) xs) @-}
+length2 :: Slice a id -> (Ur Int, Slice a id)
 length2 xs = (Ur (length xs), xs)
 
 {-@ split :: 
-      xs:(Array a id) ->
-      IndexOf xs ->
-      (Array a id, Array a id) @-}
-split :: Array a id -> Int -> (Array a id, Array a id)
-split (Array xs (j, k)) i = (Array xs1 (j, j + i - 1), Array xs2 (j + i, k))
+      xs:(Slice a id) ->
+      InRange 0 (length xs) ->
+      (Slice a id, Slice a id) @-}
+split :: Slice a id -> Int -> (Slice a id, Slice a id)
+split (Slice xs j k) i = (Slice xs1 j (j + i), Slice xs2 (j + i) k)
   where (xs1, xs2) = V.splitAt i xs
 
-{-@ (+:+) :: SizedArray n a id -> SizedArray m a id -> SizedArray (m + n) a id @-}
-(+:+) :: Array a id -> Array a id -> Array a id
-Array xs (i, j) +:+ Array ys (j', k)
-  | j + 1 == j' = Array (xs V.++ ys) (i, k)
-  | otherwise = error "Bad bounds!"
+{-@ (+:+) :: 
+      xs:(Slice a id) -> 
+      ys:{arr:(Slice a id) | rightBound xs + 1 == leftBound ys} -> 
+      {arr:(Slice a id) | length arr == length xs + length ys} @-}
+(+:+) :: Slice a id -> Slice a id -> Slice a id
+Slice xs i j +:+ Slice ys j' k
+  | j + 1 == j' = Slice (xs V.++ ys) i k
+  | otherwise = die "Bad bounds!"

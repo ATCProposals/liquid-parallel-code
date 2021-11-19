@@ -27,12 +27,12 @@ library
   exposed-modules:
       Cilksort,
       Lib,
-      LinearArray,
-      Set
+      LinearArray
   other-modules:
       Paths_mergesort
   hs-source-dirs:
       src
+  ghc-options: -fplugin=LiquidHaskell
   build-depends:
       vector,
       linear-base,

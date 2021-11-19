@@ -1,7 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Cilksort where 
-
+{-
 import LinearArray
 import Data.Unrestricted.Internal.Ur
 
@@ -190,3 +190,4 @@ mergeSort xs =
 
 cilkSort :: Array Int id -> Array Int id
 cilkSort xs = mergeSort xs
+-}
